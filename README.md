@@ -82,7 +82,7 @@ And the business layer, over the same run:
 - 88.2% success rate, ₹1,751 average ticket, ~10,100 daily active payers
 - KPIs cut by bank, app and city; `IDFC` leads volume at ₹3.99 Cr
 
-`106 tests passing · ruff clean · mypy clean · TypeScript clean`
+`114 tests passing · ruff clean · mypy clean · TypeScript clean`
 
 ---
 
@@ -230,6 +230,30 @@ meaningless, and the mistake is invisible until someone asks why recall is exact
 ## Running it
 
 ```bash
+./run.sh        # everything: setup if needed, pipeline, export, dashboard on :5173
+```
+
+That is the whole thing from a fresh clone — it installs the Python environment, a
+project-local JDK 17 and the dashboard's dependencies, generates the data, runs all
+four layers, exports the Gold layer and serves the page. Later runs skip whatever is
+already in place, so it is also the everyday command.
+
+```bash
+./run.sh --fresh          # wipe and regenerate first
+./run.sh --serve-only     # skip the pipeline, re-export and serve
+./run.sh --scale 0.1      # a smaller dataset
+./run.sh --build          # production build on :4173 instead of the dev server
+./run.sh --no-serve       # pipeline and export only
+```
+
+Two halves, and only one of them is a server: the **backend** is the Spark pipeline,
+which runs, finishes and exits, and the **frontend** reads a static export of what it
+wrote. There is deliberately no API service — nothing has to stay up for the page to
+work.
+
+The pieces individually:
+
+```bash
 make setup      # uv venv on Python 3.11 + a project-local Temurin JDK 17
 make doctor     # prove Spark and Delta actually start before running anything
 make demo       # generate → landing → bronze → silver → gold → report
@@ -247,17 +271,15 @@ make gen SCALE=0.05          # smaller dataset
 make run-landing             # or run-bronze / run-silver / run-gold
 make run-local               # all four
 make report                  # KPIs, alerts, quarantine, detection vs. truth
-make check                   # ruff + mypy + TypeScript + 106 tests
+make check                   # ruff + mypy + TypeScript + 114 tests
 ```
 
 ---
 
 ## The dashboard
 
-```bash
-make web-install   # once — npm install
-make web           # export Gold → build → serve on localhost:4173
-```
+`./run.sh` starts it; `make web` is the export → build → preview chain if you want the
+production build instead of the dev server.
 
 One scrolling page carrying the pipeline story and a working alert console:
 
@@ -284,7 +306,7 @@ static and hosts anywhere. `SENTINEL_ENV=databricks` exports from Unity Catalog 
 no code change, because the export goes through the same `tables.read()` the pipeline
 uses.
 
-**How it is kept honest.** `tests/spark/test_web_export.py` asserts the emitted numbers
+**How it is kept honest.** `tests/spark/test_web_export.py asserts the emitted numbers
 against the Gold tables — the funnel must account for every row that left, the daily
 KPIs must reconcile with the headline, and detection must match what `make report`
 prints. A dashboard is a second implementation of every number it shows, and without
@@ -304,6 +326,7 @@ chart has a table toggle.
 ## Layout
 
 ```
+run.sh          one command: pipeline + export + dashboard
 conf/           base.yaml (rules, thresholds, defect rates) + one file per environment
 src/sentinel/
   config.py     environment resolution — the seam that makes one codebase run in two places

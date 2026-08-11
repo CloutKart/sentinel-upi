@@ -65,7 +65,9 @@ SCHEMAS=(raw landing bronze silver gold quarantine)
 VOLUMES=(upi_drop checkpoints truth autoloader_schema libs)
 
 usage() {
-  sed -n '3,26p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  # Print the header comment, stopping at the first line that is not one, so the
+  # help text cannot drift out of sync with a hardcoded line range.
+  awk 'NR>2 { if (!/^#/) exit; sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}"
   cat <<EOF
 
 Options:

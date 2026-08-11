@@ -70,6 +70,10 @@ run-local:  ## Full pipeline: landing -> bronze -> silver -> gold
 report:  ## Print KPIs, top fraud alerts, quarantine breakdown and detection recall
 	$(UV) run sentinel-run report
 
+.PHONY: run
+run:  ## Everything: pipeline (if needed), export, and the dashboard on :5173
+	./run.sh
+
 .PHONY: demo
 demo:  ## Clean slate: generate, run every layer, then report
 	@# clean-all, not clean: `clean` deliberately keeps data/raw, so a demo built on it

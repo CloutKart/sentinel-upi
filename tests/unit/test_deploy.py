@@ -1,4 +1,4 @@
-"""The deployment template and the script that renders it, kept in step.
+"""The shell scripts, and the templates they render, kept in step.
 
 None of this can be tested against a real workspace from here — there are no
 credentials. What *can* be tested is everything that would otherwise fail at deploy
@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,7 @@ import yaml
 REPO = Path(__file__).resolve().parents[2]
 TEMPLATE = REPO / "databricks" / "job_sentinel_pipeline.json"
 SCRIPT = REPO / "databricks" / "deploy.sh"
+RUN_SCRIPT = REPO / "run.sh"
 DATABRICKS_CONF = REPO / "conf" / "databricks.yaml"
 
 PLACEHOLDER = re.compile(r"\$\{([A-Z_]+)\}")
@@ -157,9 +159,60 @@ def test_the_script_creates_every_schema_the_config_uses(script_text):
     assert not missing, f"config uses schemas deploy.sh never creates: {sorted(missing)}"
 
 
-def test_the_script_is_executable():
-    """Committed without the bit set, the documented `./databricks/deploy.sh` fails."""
-    assert SCRIPT.stat().st_mode & 0o111, "deploy.sh is not executable"
+@pytest.mark.parametrize("script", [SCRIPT, RUN_SCRIPT], ids=["deploy.sh", "run.sh"])
+def test_the_scripts_are_executable(script):
+    """Committed without the bit set, the documented `./run.sh` fails with Permission denied.
+
+    git does track the bit, and it is easy to lose by copying a file into place.
+    """
+    assert script.stat().st_mode & 0o111, f"{script.name} is not executable"
+
+
+@pytest.mark.parametrize("script", [SCRIPT, RUN_SCRIPT], ids=["deploy.sh", "run.sh"])
+def test_the_scripts_parse(script):
+    """`bash -n` on both, so a syntax error cannot reach a user who just cloned this."""
+    result = subprocess.run(
+        ["bash", "-n", str(script)], capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("script", [SCRIPT, RUN_SCRIPT], ids=["deploy.sh", "run.sh"])
+def test_help_needs_no_environment(script):
+    """--help must work before anything is installed.
+
+    It is the first thing anyone runs, and it is the wrong moment to discover that the
+    script dies on a missing venv while trying to explain itself.
+    """
+    result = subprocess.run(
+        [str(script), "--help"], capture_output=True, text=True, check=False, cwd=REPO
+    )
+    assert result.returncode == 0, result.stderr
+    assert "Options:" in result.stdout
+    # The header is printed by walking the leading comment block; a stray line means
+    # that walk has run past the end of it.
+    assert "set -euo pipefail" not in result.stdout
+
+
+@pytest.mark.parametrize("script", [SCRIPT, RUN_SCRIPT], ids=["deploy.sh", "run.sh"])
+def test_unknown_options_fail_loudly(script):
+    """Silently ignoring a typo'd flag means running something other than was asked."""
+    result = subprocess.run(
+        [str(script), "--not-a-real-flag"], capture_output=True, text=True, check=False, cwd=REPO
+    )
+    assert result.returncode != 0
+    assert "Unknown option" in result.stderr
+
+
+def test_run_script_documents_every_option_it_accepts():
+    """A flag in the case statement but not in --help is a flag nobody will find."""
+    text = RUN_SCRIPT.read_text()
+    case_block = text.split("while [[ $# -gt 0 ]]", 1)[1].split("done", 1)[0]
+    accepted = set(re.findall(r"^\s+(--[a-z-]+)\)", case_block, re.MULTILINE))
+    documented = set(re.findall(r"^\s+(--[a-z-]+)\s", text, re.MULTILINE))
+
+    undocumented = accepted - documented
+    assert not undocumented, f"run.sh accepts undocumented flags: {sorted(undocumented)}"
 
 
 def test_the_script_declares_its_unverified_status(script_text):
