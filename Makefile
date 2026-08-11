@@ -138,6 +138,18 @@ typecheck:  ## mypy, and the dashboard's TypeScript if it is installed
 
 check: lint typecheck test  ## Everything CI runs
 
+# ---------------------------------------------------------------- databricks
+
+.PHONY: deploy deploy-dry deploy-run
+deploy-dry:  ## Render and validate the deployment without touching a workspace
+	./databricks/deploy.sh --dry-run
+
+deploy:  ## Deploy wheel + notebooks + job to Databricks (needs `databricks auth login`)
+	./databricks/deploy.sh
+
+deploy-run:  ## Deploy, then trigger the job and wait for it
+	./databricks/deploy.sh --run
+
 # ---------------------------------------------------------------- misc
 
 .PHONY: clean clean-all

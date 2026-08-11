@@ -1,18 +1,19 @@
 {
-  "name": "sentinel_pipeline",
+  "_comment": "Template. deploy.sh renders the ${...} placeholders and drops job_clusters entirely when deploying to serverless compute. Do not run this file through `databricks jobs create` directly — the placeholders are not valid Databricks values.",
+  "name": "${JOB_NAME}",
   "description": "Project Sentinel — UPI telemetry generation and the Landing/Bronze/Silver/Gold medallion pipeline.",
   "max_concurrent_runs": 1,
   "tags": {
     "project": "sentinel",
-    "owner": "data-engineering"
+    "managed_by": "deploy.sh"
   },
   "job_clusters": [
     {
       "job_cluster_key": "sentinel_cluster",
       "new_cluster": {
-        "spark_version": "15.4.x-scala2.12",
-        "node_type_id": "Standard_DS3_v2",
-        "num_workers": 2,
+        "spark_version": "${SPARK_VERSION}",
+        "node_type_id": "${NODE_TYPE}",
+        "num_workers": ${NUM_WORKERS},
         "data_security_mode": "SINGLE_USER",
         "spark_conf": {
           "spark.sql.session.timeZone": "Asia/Kolkata"
@@ -21,14 +22,8 @@
     }
   ],
   "parameters": [
-    {
-      "name": "env",
-      "default": "databricks"
-    },
-    {
-      "name": "scale",
-      "default": "1.0"
-    }
+    { "name": "env", "default": "databricks" },
+    { "name": "scale", "default": "${SCALE}" }
   ],
   "tasks": [
     {
@@ -36,17 +31,13 @@
       "description": "Step 0 — drop simulated UPI JSON into the Unity Catalog Volume.",
       "job_cluster_key": "sentinel_cluster",
       "notebook_task": {
-        "notebook_path": "/Workspace/Shared/sentinel/notebooks/00_generate",
+        "notebook_path": "${NOTEBOOK_DIR}/00_generate",
         "base_parameters": {
           "env": "{{job.parameters.env}}",
           "scale": "{{job.parameters.scale}}"
         }
       },
-      "libraries": [
-        {
-          "whl": "/Volumes/sentinel/raw/libs/sentinel-0.1.0-py3-none-any.whl"
-        }
-      ]
+      "libraries": [{ "whl": "${WHEEL_PATH}" }]
     },
     {
       "task_key": "landing",
@@ -54,17 +45,13 @@
       "depends_on": [{ "task_key": "generate" }],
       "job_cluster_key": "sentinel_cluster",
       "notebook_task": {
-        "notebook_path": "/Workspace/Shared/sentinel/notebooks/01_landing",
+        "notebook_path": "${NOTEBOOK_DIR}/01_landing",
         "base_parameters": {
           "env": "{{job.parameters.env}}",
           "run_id": "{{job.run_id}}"
         }
       },
-      "libraries": [
-        {
-          "whl": "/Volumes/sentinel/raw/libs/sentinel-0.1.0-py3-none-any.whl"
-        }
-      ]
+      "libraries": [{ "whl": "${WHEEL_PATH}" }]
     },
     {
       "task_key": "bronze",
@@ -72,17 +59,13 @@
       "depends_on": [{ "task_key": "landing" }],
       "job_cluster_key": "sentinel_cluster",
       "notebook_task": {
-        "notebook_path": "/Workspace/Shared/sentinel/notebooks/02_bronze",
+        "notebook_path": "${NOTEBOOK_DIR}/02_bronze",
         "base_parameters": {
           "env": "{{job.parameters.env}}",
           "run_id": "{{job.run_id}}"
         }
       },
-      "libraries": [
-        {
-          "whl": "/Volumes/sentinel/raw/libs/sentinel-0.1.0-py3-none-any.whl"
-        }
-      ]
+      "libraries": [{ "whl": "${WHEEL_PATH}" }]
     },
     {
       "task_key": "silver",
@@ -90,17 +73,13 @@
       "depends_on": [{ "task_key": "bronze" }],
       "job_cluster_key": "sentinel_cluster",
       "notebook_task": {
-        "notebook_path": "/Workspace/Shared/sentinel/notebooks/03_silver",
+        "notebook_path": "${NOTEBOOK_DIR}/03_silver",
         "base_parameters": {
           "env": "{{job.parameters.env}}",
           "run_id": "{{job.run_id}}"
         }
       },
-      "libraries": [
-        {
-          "whl": "/Volumes/sentinel/raw/libs/sentinel-0.1.0-py3-none-any.whl"
-        }
-      ]
+      "libraries": [{ "whl": "${WHEEL_PATH}" }]
     },
     {
       "task_key": "gold",
@@ -108,17 +87,13 @@
       "depends_on": [{ "task_key": "silver" }],
       "job_cluster_key": "sentinel_cluster",
       "notebook_task": {
-        "notebook_path": "/Workspace/Shared/sentinel/notebooks/04_gold",
+        "notebook_path": "${NOTEBOOK_DIR}/04_gold",
         "base_parameters": {
           "env": "{{job.parameters.env}}",
           "run_id": "{{job.run_id}}"
         }
       },
-      "libraries": [
-        {
-          "whl": "/Volumes/sentinel/raw/libs/sentinel-0.1.0-py3-none-any.whl"
-        }
-      ]
+      "libraries": [{ "whl": "${WHEEL_PATH}" }]
     }
   ]
 }

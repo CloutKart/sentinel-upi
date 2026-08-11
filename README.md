@@ -82,7 +82,7 @@ And the business layer, over the same run:
 - 88.2% success rate, ₹1,751 average ticket, ~10,100 daily active payers
 - KPIs cut by bank, app and city; `IDFC` leads volume at ₹3.99 Cr
 
-`97 tests passing · ruff clean · mypy clean · TypeScript clean`
+`106 tests passing · ruff clean · mypy clean · TypeScript clean`
 
 ---
 
@@ -247,7 +247,7 @@ make gen SCALE=0.05          # smaller dataset
 make run-landing             # or run-bronze / run-silver / run-gold
 make run-local               # all four
 make report                  # KPIs, alerts, quarantine, detection vs. truth
-make check                   # ruff + mypy + TypeScript + 97 tests
+make check                   # ruff + mypy + TypeScript + 106 tests
 ```
 
 ---
@@ -336,9 +336,28 @@ cover, and the code running on a cluster is the code that was tested.
 
 No module under `src/sentinel` reads any of that directly.
 
+Deployment is one command:
+
+```bash
+databricks auth login --host https://<workspace-host>
+make deploy-dry    # render and validate everything, touch nothing
+make deploy        # wheel + notebooks + job, idempotently
+make deploy-run    # ...and trigger it
+```
+
+`databricks/deploy.sh` builds the wheel (asserting `conf/` is inside it before
+uploading anything), creates the catalog, schemas and volumes, publishes the wheel and
+notebooks, and creates the job — or updates it in place if a job of that name already
+exists, so repeated deploys do not fill a workspace with duplicates. Node type is
+inferred from the workspace host, because an Azure id on AWS fails at cluster start,
+minutes into a run, with an error that never mentions the cloud. `--serverless` drops
+the cluster block entirely for Free Edition.
+
 **Not yet run against a live workspace** — there are no workspace credentials on the
-machine this was built on. `databricks/README.md` documents the deployment; treat the
-first cluster run as unverified.
+machine this was built on. Every CLI invocation was checked against `databricks --help`
+for v1.11.0, `--dry-run` exercises everything but the remote calls, and
+`tests/unit/test_deploy.py` catches drift between the job template, the config and the
+script. No cluster has executed it. Start with `make deploy-dry`.
 
 Before any real deployment, `silver.pii_salt` must come from a secret scope rather
 than `conf/base.yaml`. It is the salt for the device and IP hashes, so anyone holding

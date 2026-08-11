@@ -12,12 +12,16 @@ catalog: "sentinel"
 # Managed tables — no explicit storage root. Unity Catalog decides where bytes land.
 root: null
 
+# Each of these is a distinct Unity Catalog *volume* under the `raw` schema, not a
+# directory inside one — /Volumes/<catalog>/<schema>/<volume> is the full addressable
+# prefix, so anything after it is a path within that volume. databricks/deploy.sh
+# creates exactly this list.
 paths:
   # The Volume the telemetry generator drops JSON into.
   raw:         "/Volumes/${catalog}/raw/upi_drop"
   # Streaming checkpoints must live on a Volume; they cannot be managed tables.
-  checkpoints: "/Volumes/${catalog}/raw/_checkpoints"
-  truth:       "/Volumes/${catalog}/raw/_truth"
+  checkpoints: "/Volumes/${catalog}/raw/checkpoints"
+  truth:       "/Volumes/${catalog}/raw/truth"
 
 # Schemas the medallion tables are created in.
 schemas:
@@ -33,7 +37,7 @@ landing:
   reader_format: "cloudFiles"
   cloud_files:
     cloudFiles.format: "text"
-    cloudFiles.schemaLocation: "/Volumes/${catalog}/raw/_schema/landing"
+    cloudFiles.schemaLocation: "/Volumes/${catalog}/raw/autoloader_schema/landing"
 
 spark:
   app_name: "sentinel"
