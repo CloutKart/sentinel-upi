@@ -82,7 +82,7 @@ And the business layer, over the same run:
 - 88.2% success rate, ₹1,751 average ticket, ~10,100 daily active payers
 - KPIs cut by bank, app and city; `IDFC` leads volume at ₹3.99 Cr
 
-`116 tests passing · ruff clean · mypy clean · TypeScript clean`
+`119 tests passing · ruff clean · mypy clean · TypeScript clean`
 
 ---
 
@@ -231,6 +231,7 @@ meaningless, and the mistake is invisible until someone asks why recall is exact
 
 ```bash
 ./run.sh        # everything: setup if needed, pipeline, export, dashboard on :5173
+.\run.ps1       # the same thing on Windows (PowerShell 7)
 ```
 
 That is the whole thing from a fresh clone — it installs the Python environment, a
@@ -245,6 +246,12 @@ already in place, so it is also the everyday command.
 ./run.sh --build          # production build on :4173 instead of the dev server
 ./run.sh --no-serve       # pipeline and export only
 ```
+
+On Windows use `run.ps1` with the same options as PowerShell switches
+(`-Fresh`, `-ServeOnly`, `-Scale 0.1`, `-Build`, `-NoServe`). It is not a translation
+of the bash script: Windows has no `make`, so it does the install work itself, and it
+fetches the **Windows** JDK build rather than the Linux one. Everything else behaves
+the same.
 
 Two halves, and only one of them is a server: the **backend** is the Spark pipeline,
 which runs, finishes and exits, and the **frontend** reads a static export of what it
@@ -271,7 +278,7 @@ make gen SCALE=0.05          # smaller dataset
 make run-landing             # or run-bronze / run-silver / run-gold
 make run-local               # all four
 make report                  # KPIs, alerts, quarantine, detection vs. truth
-make check                   # ruff + mypy + TypeScript + 116 tests
+make check                   # ruff + mypy + TypeScript + 119 tests
 ```
 
 ---
@@ -326,7 +333,7 @@ chart has a table toggle.
 ## Layout
 
 ```
-run.sh          one command: pipeline + export + dashboard
+run.sh run.ps1  one command: pipeline + export + dashboard (bash / PowerShell)
 conf/           base.yaml (rules, thresholds, defect rates) + one file per environment
 src/sentinel/
   config.py     environment resolution — the seam that makes one codebase run in two places
@@ -367,6 +374,10 @@ make deploy-dry    # render and validate everything, touch nothing
 make deploy        # wheel + notebooks + job, idempotently
 make deploy-run    # ...and trigger it
 ```
+
+On Windows: `.\databricks\deploy.ps1 -DryRun`, then without the switch. Both
+implementations render byte-identical job definitions — a test asserts they declare
+the same catalog objects.
 
 `databricks/deploy.sh` builds the wheel (asserting `conf/` is inside it before
 uploading anything), creates the catalog, schemas and volumes, publishes the wheel and

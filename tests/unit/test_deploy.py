@@ -23,6 +23,8 @@ REPO = Path(__file__).resolve().parents[2]
 TEMPLATE = REPO / "databricks" / "job_sentinel_pipeline.json"
 SCRIPT = REPO / "databricks" / "deploy.sh"
 RUN_SCRIPT = REPO / "run.sh"
+RUN_PS1 = REPO / "run.ps1"
+DEPLOY_PS1 = REPO / "databricks" / "deploy.ps1"
 DATABRICKS_CONF = REPO / "conf" / "databricks.yaml"
 
 PLACEHOLDER = re.compile(r"\$\{([A-Z_]+)\}")
@@ -202,6 +204,52 @@ def test_unknown_options_fail_loudly(script):
     )
     assert result.returncode != 0
     assert "Unknown option" in result.stderr
+
+
+def test_powershell_deploy_declares_the_same_schemas_and_volumes():
+    """The two deploy scripts must create the same Unity Catalog objects.
+
+    They are separate implementations, so nothing but a test keeps them in step — and
+    a volume created on Linux but not on Windows fails only on the first write to it,
+    partway through a run.
+    """
+    ps = DEPLOY_PS1.read_text()
+    sh = SCRIPT.read_text()
+
+    for name in ("SCHEMAS", "VOLUMES"):
+        bash_list = set(re.search(rf"^{name}=\(([^)]*)\)", sh, re.MULTILINE).group(1).split())
+        pwsh_list = set(
+            re.findall(
+                r"'([a-z_]+)'",
+                re.search(rf"\${name.capitalize()} = @\(([^)]*)\)", ps).group(1),
+            )
+        )
+        assert bash_list == pwsh_list, f"{name} differs: bash {bash_list} vs powershell {pwsh_list}"
+
+
+def test_powershell_run_refuses_to_run_on_the_wrong_platform():
+    """It installs a *Windows* JDK into JAVA_HOME.
+
+    On Linux that replaces a working JDK with binaries the platform cannot execute —
+    which happened during development, to the machine this was written on.
+    """
+    assert "-not $IsWindows" in RUN_PS1.read_text()
+
+
+def test_powershell_scripts_use_forward_slashes_in_paths():
+    """Windows accepts forward slashes, and they keep the scripts runnable under
+    PowerShell on Linux — which is the only way the job rendering gets tested at all."""
+    for script in (RUN_PS1, DEPLOY_PS1):
+        for line in script.read_text().splitlines():
+            if line.lstrip().startswith("#") or ".EXAMPLE" in line:
+                continue
+            # Backslashes are legitimate inside PowerShell escapes and regexes; only
+            # quoted repo-relative paths are being checked here.
+            for match in re.findall(r"'([A-Za-z0-9_./\\*-]+)'", line):
+                if "\\" in match and "/" not in match and not match.startswith("\\"):
+                    raise AssertionError(
+                        f"{script.name}: backslash path {match!r} in: {line.strip()}"
+                    )
 
 
 def test_run_script_checks_every_tool_it_shells_out_to():
