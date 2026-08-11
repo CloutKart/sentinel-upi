@@ -1,0 +1,139 @@
+/* Project Sentinel design tokens.
+ *
+ * The categorical palette was not chosen by eye — it was run through the dataviz
+ * validator in both modes, on the adjacent pairlist:
+ *
+ *   light   CVD ΔE 9.1 (yellow↔aqua, protan) · normal-vision ΔE 19.6 · ALL PASS
+ *   dark    CVD ΔE 8.4 (yellow↔aqua, protan) · normal-vision ΔE 19.3 · ALL PASS
+ *
+ * One standing obligation carried into the components: on the *light* surface aqua
+ * (2.74:1), yellow (2.11:1) and magenta (2.62:1) sit below the 3:1 floor. Anything
+ * drawn in those hues must carry a direct label or appear in a table view. That is
+ * why every rule swatch here is a labelled chip, never a bare colour, and why every
+ * chart has a table toggle.
+ *
+ * Dark mode is a *selected* set of steps validated against the dark surface — not an
+ * inverted filter over the light one.
+ *
+ * Risk bands use the reserved status palette, never the categorical slots, so a band
+ * colour can never be mistaken for a rule colour. Status is always shipped with its
+ * label; on the light surface `warning` is sub-3:1 by design and the label is the
+ * mitigation.
+ */
+
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap");
+
+:root {
+  color-scheme: light;
+
+  /* ---- categorical: fixed order, never cycled. One slot per fraud rule. ---- */
+  --cat-1: #2a78d6; /* blue     — high_amount */
+  --cat-2: #eb6834; /* orange   — shared_ip */
+  --cat-3: #1baf7a; /* aqua     — velocity   (label obligation, see above) */
+  --cat-4: #eda100; /* yellow   — fanout     (label obligation) */
+  --cat-5: #e87ba4; /* magenta  — odd_hour   (label obligation) */
+
+  /* ---- sequential: one hue, light -> dark. Funnel stages (ordinal: no step
+         lighter than 250 on light). ---- */
+  --seq-250: #86b6ef;
+  --seq-350: #5598e7;
+  --seq-450: #2a78d6;
+  --seq-550: #1c5cab;
+  --seq-650: #104281;
+
+  /* ---- status: reserved. Risk bands only. Never a series colour. ---- */
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-critical: #d03b3b;
+
+  /* ---- surfaces & ink ---- */
+  --surface-0: #f5f4f1;
+  --surface-1: #fcfcfb;
+  --surface-2: #eeede9;
+  --border: #dcdad3;
+  --border-strong: #bdbab0;
+
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #78766f;
+
+  --grid: #e6e4de;
+  --accent: #1c5cab;
+
+  /* ---- type ---- */
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+
+  /* ---- spacing & shape ---- */
+  --radius: 4px;
+  --radius-lg: 10px;
+  --shadow: 0 1px 2px rgb(0 0 0 / 6%), 0 6px 20px rgb(0 0 0 / 4%);
+}
+
+/* Dark values are declared under both scopes: the media query covers the OS setting,
+ * the data-theme scope covers the in-page toggle, which must win in both directions.
+ * The :not() guard lets an explicit light stamp beat OS-dark. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --cat-1: #3987e5;
+    --cat-2: #d95926;
+    --cat-3: #199e70;
+    --cat-4: #c98500;
+    --cat-5: #d55181;
+
+    --seq-250: #184f95;
+    --seq-350: #1c5cab;
+    --seq-450: #256abf;
+    --seq-550: #3987e5;
+    --seq-650: #5598e7;
+
+    --surface-0: #121211;
+    --surface-1: #1a1a19;
+    --surface-2: #232322;
+    --border: #34342f;
+    --border-strong: #4c4c45;
+
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #94938a;
+
+    --grid: #2b2b28;
+    --accent: #5598e7;
+
+    --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 6px 20px rgb(0 0 0 / 30%);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --cat-1: #3987e5;
+  --cat-2: #d95926;
+  --cat-3: #199e70;
+  --cat-4: #c98500;
+  --cat-5: #d55181;
+
+  --seq-250: #184f95;
+  --seq-350: #1c5cab;
+  --seq-450: #256abf;
+  --seq-550: #3987e5;
+  --seq-650: #5598e7;
+
+  --surface-0: #121211;
+  --surface-1: #1a1a19;
+  --surface-2: #232322;
+  --border: #34342f;
+  --border-strong: #4c4c45;
+
+  --text-primary: #ffffff;
+  --text-secondary: #c3c2b7;
+  --text-muted: #94938a;
+
+  --grid: #2b2b28;
+  --accent: #5598e7;
+
+  --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 6px 20px rgb(0 0 0 / 30%);
+}

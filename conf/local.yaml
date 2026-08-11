@@ -1,0 +1,36 @@
+# Local development. Every zone is a plain Delta directory under ./data, addressed by
+# path. No Unity Catalog — which is exactly why transformation code must never name a
+# catalog directly. It asks the config for a table location and gets back either
+# ./data/silver/upi_transactions or sentinel.silver.upi_transactions.
+
+env: local
+
+catalog: null
+
+root: "./data"
+
+paths:
+  # Step 0 writes here. On Databricks this is a Unity Catalog Volume.
+  raw:         "${root}/raw"
+  landing:     "${root}/landing"
+  bronze:      "${root}/bronze"
+  silver:      "${root}/silver"
+  gold:        "${root}/gold"
+  quarantine:  "${root}/quarantine"
+  checkpoints: "${root}/checkpoints"
+  # Injected-fraud labels, written by the generator, read only by the run report.
+  truth:       "${root}/_truth"
+
+# Plain file-based JSON/text streaming. Auto Loader does not exist off-platform.
+landing:
+  reader_format: "text"
+
+spark:
+  app_name: "sentinel-local"
+  master: "local[*]"
+  conf:
+    spark.sql.shuffle.partitions: "8"
+    spark.driver.memory: "4g"
+    spark.sql.warehouse.dir: "./data/_warehouse"
+    spark.sql.session.timeZone: "Asia/Kolkata"
+    spark.databricks.delta.retentionDurationCheck.enabled: "false"

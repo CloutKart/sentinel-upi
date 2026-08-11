@@ -1,0 +1,124 @@
+{
+  "name": "sentinel_pipeline",
+  "description": "Project Sentinel — UPI telemetry generation and the Landing/Bronze/Silver/Gold medallion pipeline.",
+  "max_concurrent_runs": 1,
+  "tags": {
+    "project": "sentinel",
+    "owner": "data-engineering"
+  },
+  "job_clusters": [
+    {
+      "job_cluster_key": "sentinel_cluster",
+      "new_cluster": {
+        "spark_version": "15.4.x-scala2.12",
+        "node_type_id": "Standard_DS3_v2",
+        "num_workers": 2,
+        "data_security_mode": "SINGLE_USER",
+        "spark_conf": {
+          "spark.sql.session.timeZone": "Asia/Kolkata"
+        }
+      }
+    }
+  ],
+  "parameters": [
+    {
+      "name": "env",
+      "default": "databricks"
+    },
+    {
+      "name": "scale",
+      "default": "1.0"
+    }
+  ],
+  "tasks": [
+    {
+      "task_key": "generate",
+      "description": "Step 0 — drop simulated UPI JSON into the Unity Catalog Volume.",
+      "job_cluster_key": "sentinel_cluster",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Shared/sentinel/notebooks/00_generate",
+        "base_parameters": {
+          "env": "{{job.parameters.env}}",
+          "scale": "{{job.parameters.scale}}"
+        }
+      },
+      "libraries": [
+        {
+          "whl": "/Volumes/sentinel/raw/libs/sentinel-0.1.0-py3-none-any.whl"
+        }
+      ]
+    },
+    {
+      "task_key": "landing",
+      "description": "Step 1 — land the raw files untransformed.",
+      "depends_on": [{ "task_key": "generate" }],
+      "job_cluster_key": "sentinel_cluster",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Shared/sentinel/notebooks/01_landing",
+        "base_parameters": {
+          "env": "{{job.parameters.env}}",
+          "run_id": "{{job.run_id}}"
+        }
+      },
+      "libraries": [
+        {
+          "whl": "/Volumes/sentinel/raw/libs/sentinel-0.1.0-py3-none-any.whl"
+        }
+      ]
+    },
+    {
+      "task_key": "bronze",
+      "description": "Step 2 — structure the landed data as Delta, preserving the mess.",
+      "depends_on": [{ "task_key": "landing" }],
+      "job_cluster_key": "sentinel_cluster",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Shared/sentinel/notebooks/02_bronze",
+        "base_parameters": {
+          "env": "{{job.parameters.env}}",
+          "run_id": "{{job.run_id}}"
+        }
+      },
+      "libraries": [
+        {
+          "whl": "/Volumes/sentinel/raw/libs/sentinel-0.1.0-py3-none-any.whl"
+        }
+      ]
+    },
+    {
+      "task_key": "silver",
+      "description": "Step 3 — cleanse, mask PII, quarantine invalid records.",
+      "depends_on": [{ "task_key": "bronze" }],
+      "job_cluster_key": "sentinel_cluster",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Shared/sentinel/notebooks/03_silver",
+        "base_parameters": {
+          "env": "{{job.parameters.env}}",
+          "run_id": "{{job.run_id}}"
+        }
+      },
+      "libraries": [
+        {
+          "whl": "/Volumes/sentinel/raw/libs/sentinel-0.1.0-py3-none-any.whl"
+        }
+      ]
+    },
+    {
+      "task_key": "gold",
+      "description": "Step 4 — KPIs and fraud scoring.",
+      "depends_on": [{ "task_key": "silver" }],
+      "job_cluster_key": "sentinel_cluster",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Shared/sentinel/notebooks/04_gold",
+        "base_parameters": {
+          "env": "{{job.parameters.env}}",
+          "run_id": "{{job.run_id}}"
+        }
+      },
+      "libraries": [
+        {
+          "whl": "/Volumes/sentinel/raw/libs/sentinel-0.1.0-py3-none-any.whl"
+        }
+      ]
+    }
+  ]
+}

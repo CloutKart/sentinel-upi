@@ -1,0 +1,81 @@
+[project]
+name = "sentinel"
+version = "0.1.0"
+description = "Project Sentinel — real-time UPI transaction & fraud detection pipeline (Medallion on Delta Lake)"
+requires-python = "==3.11.*"
+# Deliberately empty.
+#
+# This wheel is installed as a library on a Databricks cluster, where pyspark,
+# delta-spark, pandas and pyyaml are already supplied by the runtime. Declaring them
+# as hard dependencies makes pip *upgrade* the runtime's own copies, and the
+# cluster's compiled modules stop importing against them. Everything the runtime
+# provides therefore lives in the `local` extra, which local development, CI and
+# Docker install and the cluster does not.
+dependencies = []
+
+[project.optional-dependencies]
+# Pinned to Databricks Runtime 15.4 LTS so local behaviour and cluster behaviour
+# agree. delta-spark 3.2.0 pairs with Spark 3.5.x; mixing versions produces protocol
+# errors that only surface on write.
+local = [
+    "pyspark==3.5.0",
+    "delta-spark==3.2.0",
+    "pyyaml>=6.0",
+]
+generate = [
+    "faker>=30.0",
+]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.7",
+    "mypy>=1.13",
+    "types-PyYAML",
+]
+
+[project.scripts]
+sentinel-gen = "sentinel.generate.cli:main"
+sentinel-run = "sentinel.cli:main"
+sentinel-web-export = "sentinel.web.export:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sentinel"]
+
+# Ship conf/ inside the wheel as sentinel/conf. The package reads its thresholds and
+# path layout at runtime, so a wheel without them installs cleanly and then fails on
+# the first call — on a cluster, minutes into a run. config._resolve_conf_dir finds
+# this copy.
+[tool.hatch.build.targets.wheel.force-include]
+"conf" = "sentinel/conf"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "N"]
+ignore = [
+    # `from pyspark.sql import functions as F` is the universal PySpark convention.
+    "N812",
+    # Spark and pandas idioms use non-lowercase argument and variable names.
+    "N803",
+    "N806",
+]
+
+[tool.mypy]
+python_version = "3.11"
+packages = ["sentinel"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "spark: requires a local SparkSession (slow)",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]

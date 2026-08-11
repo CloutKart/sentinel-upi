@@ -1,0 +1,129 @@
+# Settings shared by every environment. conf/local.yaml and conf/databricks.yaml are
+# merged on top of this, so anything here can be overridden per environment.
+
+project: sentinel
+
+# ---------------------------------------------------------------- generator
+#
+# The project ships no dataset — the spec is explicit that data is generated. These
+# knobs describe the simulated UPI traffic and the defects deliberately injected into
+# it. The generator's unit tests assert these rates, so every layer downstream always
+# has a known quantity of each problem to solve.
+
+generator:
+  # Volume at scale=1.0. --scale multiplies this.
+  transactions: 200000
+  # Traffic is simulated across this many days ending today.
+  days: 7
+  # Distinct actors in the simulation.
+  payers: 12000
+  merchants: 1500
+  # Raw JSON is dropped as newline-delimited files of this many records, so the
+  # streaming layers below have several files to process incrementally.
+  records_per_file: 10000
+
+  # Quoted because YAML 1.1 reads a bare YES as the boolean true, and Yes Bank then
+  # arrives downstream as `True`.
+  banks: ["HDFC", "ICICI", "SBI", "AXIS", "KOTAK", "PNB", "YES", "IDFC"]
+  apps: [GPay, PhonePe, Paytm, BHIM, AmazonPay]
+  cities:
+    - {city: Mumbai,    state: MH}
+    - {city: Delhi,     state: DL}
+    - {city: Bengaluru, state: KA}
+    - {city: Hyderabad, state: TG}
+    - {city: Pune,      state: MH}
+    - {city: Chennai,   state: TN}
+    - {city: Kolkata,   state: WB}
+    - {city: Ahmedabad, state: GJ}
+  merchant_categories: ["5411", "5812", "5541", "5912", "4121", "5732", "7995", "5999"]
+
+  # Structural corruption. Real telemetry is messy; these are the specific messes.
+  corruption:
+    null_optional_rate: 0.040     # nulls in non-essential fields
+    null_required_rate: 0.008     # nulls in transaction_id / amount / event_time
+    whitespace_rate: 0.050        # leading/trailing whitespace on string fields
+    amount_as_string_rate: 0.070  # "842.50" instead of 842.50 — a real type mismatch
+    negative_amount_rate: 0.010   # impossible values that must not reach Gold
+    zero_amount_rate: 0.004
+    case_noise_rate: 0.080        # "success" / " Success " / "inr"
+    alt_timestamp_rate: 0.060     # epoch millis or dd-MM-yyyy HH:mm:ss
+    duplicate_rate: 0.015         # retry storms re-emitting the same transaction_id
+    malformed_json_rate: 0.002    # truncated lines that will never parse
+
+  # Logical anomalies. Each injected transaction's id is recorded in the truth file
+  # so detection can be measured; the label itself never enters the payload.
+  fraud:
+    suspicious_ip_count: 25       # a small pool of IPs used by the anomalies below
+    high_amount_rate: 0.0040      # unusually large amounts from suspicious IPs
+    high_amount_range: [80000, 195000]
+    velocity_bursts: 60           # payers firing many transactions in a few minutes
+    velocity_burst_size: [12, 30]
+    velocity_burst_minutes: 5
+    fanout_payers: 40             # one payer paying an implausible number of payees
+    fanout_payees: [25, 60]
+    odd_hour_rate: 0.0030         # activity between 00:00 and 05:00 IST
+
+# ---------------------------------------------------------------- silver
+#
+# Cleansing rules. Anything failing these is quarantined with a reason rather than
+# dropped, so the run report can say why rows disappeared.
+
+silver:
+  valid_statuses: [SUCCESS, FAILED, PENDING, REVERSED]
+  valid_currencies: [INR]
+  max_amount: 500000              # UPI P2P ceiling headroom; above this is nonsense
+  # Late-arriving events are tolerated for this long when deduplicating the retry
+  # storms the generator injects.
+  watermark: "2 hours"
+  # Salt for the one-way hashes that replace device ids and IPs. Overridden per
+  # environment; on a cluster it should come from a secret scope.
+  pii_salt: "sentinel-local-salt"
+
+# ---------------------------------------------------------------- gold
+#
+# Fraud scoring is additive: every rule that fires adds its weight and appends its
+# name to the row's `reasons` array, so an alert always explains itself. Thresholds
+# live here rather than in code because tuning them is an analyst's job, not an
+# engineer's.
+
+gold:
+  fraud_rules:
+    high_amount:
+      # Tukey upper fence: Q3 + k*(Q3-Q1) over successful amounts.
+      #
+      # A high percentile was the obvious choice and is the wrong one. Injected
+      # anomalies are ~0.7% of traffic, so the 99.5th percentile lands *inside* the
+      # fraud population and the threshold rises to exclude it — measured at ₹103,899
+      # on this data, which is above most of the fraud. The quartiles a fence is built
+      # from sit in the dense middle of the distribution, where a fraction of a
+      # percent of outliers cannot move them.
+      iqr_multiplier: 3.0
+      # ...and an absolute floor besides, because "large" has a domain meaning here:
+      # the UPI per-transaction cap is ₹1 lakh for most banks, so ₹50k is genuinely
+      # the top of the ordinary range regardless of what the distribution says.
+      floor: 50000
+      weight: 30
+    shared_ip:
+      # One IP fronting this many distinct payers is not a household router.
+      min_distinct_payers: 5
+      weight: 25
+    velocity:
+      window_minutes: 5
+      max_transactions: 10
+      weight: 25
+    fanout:
+      window_minutes: 60
+      max_distinct_payees: 15
+      # Weighted equally with velocity: an account paying fifteen strangers in an hour
+      # is as strong a mule signal as one draining itself in five minutes, and at a
+      # lower weight it could never combine with shared_ip to reach HIGH.
+      weight: 25
+    odd_hour:
+      start_hour: 0
+      end_hour: 5
+      # Weak on its own — a legitimate late-night payment is common. It earns its
+      # keep by pushing an already-suspicious transaction over the HIGH threshold.
+      weight: 10
+  risk_bands:
+    high: 50
+    medium: 25

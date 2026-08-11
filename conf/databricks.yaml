@@ -1,0 +1,42 @@
+# Databricks with Unity Catalog. The zones become schemas in one catalog and the raw
+# drop zone becomes a Volume, per Step 0 of the specification.
+#
+# Nothing in src/sentinel changes between this file and local.yaml. Tables are written
+# by name here and by path locally; utils/tables.py is the only module that knows the
+# difference.
+
+env: databricks
+
+catalog: "sentinel"
+
+# Managed tables — no explicit storage root. Unity Catalog decides where bytes land.
+root: null
+
+paths:
+  # The Volume the telemetry generator drops JSON into.
+  raw:         "/Volumes/${catalog}/raw/upi_drop"
+  # Streaming checkpoints must live on a Volume; they cannot be managed tables.
+  checkpoints: "/Volumes/${catalog}/raw/_checkpoints"
+  truth:       "/Volumes/${catalog}/raw/_truth"
+
+# Schemas the medallion tables are created in.
+schemas:
+  landing:    "landing"
+  bronze:     "bronze"
+  silver:     "silver"
+  gold:       "gold"
+  quarantine: "quarantine"
+
+# Auto Loader. Same code path as local `text`, incremental file discovery instead of
+# a directory listing — the one line that differs between environments.
+landing:
+  reader_format: "cloudFiles"
+  cloud_files:
+    cloudFiles.format: "text"
+    cloudFiles.schemaLocation: "/Volumes/${catalog}/raw/_schema/landing"
+
+spark:
+  app_name: "sentinel"
+  master: null                      # the cluster supplies it
+  conf:
+    spark.sql.session.timeZone: "Asia/Kolkata"

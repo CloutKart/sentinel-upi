@@ -1,0 +1,25 @@
+# Generated data and pipeline output. Everything under data/ is reproducible from
+# `make gen` and is far too large to version.
+data/
+
+# Python
+.venv/
+__pycache__/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Spark
+spark-warehouse/
+metastore_db/
+derby.log
+
+# Dashboard
+node_modules/
+dashboards/web/dist/
+*.tsbuildinfo
+# Exported Gold snapshots — regenerate with `make web-data`, never version them.
+dashboards/web/public/data/
