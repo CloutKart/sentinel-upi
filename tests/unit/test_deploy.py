@@ -204,6 +204,31 @@ def test_unknown_options_fail_loudly(script):
     assert "Unknown option" in result.stderr
 
 
+def test_run_script_checks_every_tool_it_shells_out_to():
+    """A tool used but not checked produces the wrong error message.
+
+    `make setup failed — run it directly to see why` is actively misleading when the
+    real cause is that `make` is not installed: running it directly fails identically,
+    and the cause is never named.
+    """
+    text = RUN_SCRIPT.read_text()
+    for tool in ("uv", "npm", "make", "curl", "tar"):
+        assert f"have {tool}" in text, f"run.sh uses {tool} without checking for it"
+
+
+def test_run_script_checks_prerequisites_before_installing_anything():
+    """Order matters: a machine without node should not spend minutes building a
+    Python environment and a JDK before being told the dashboard cannot start."""
+    text = RUN_SCRIPT.read_text()
+    checks_end = text.index("Install the above, then re-run.")
+    first_install = min(
+        text.index("make setup"),
+        text.index("make jdk"),
+        text.index("npm install"),
+    )
+    assert checks_end < first_install, "run.sh installs something before checking for tools"
+
+
 def test_run_script_documents_every_option_it_accepts():
     """A flag in the case statement but not in --help is a flag nobody will find."""
     text = RUN_SCRIPT.read_text()

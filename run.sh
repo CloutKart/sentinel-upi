@@ -78,35 +78,91 @@ PORT="${PORT:-$([[ ${BUILD} -eq 1 ]] && echo 4173 || echo 5173)}"
 # exports this too; setting it here means the script works when invoked directly.
 export JAVA_HOME="${JAVA_HOME:-${HOME}/.local/jdks/jdk-17}"
 
-# ---------------------------------------------------------------- 1. toolchain
+# ---------------------------------------------------------------- 1. prerequisites
+#
+# Everything is checked before anything is installed. Checking as we go means a
+# machine without node spends several minutes building a Python environment and a JDK
+# before being told the dashboard cannot start — and then has to be told again on the
+# next run, after the same wait.
+#
+# Only what this particular invocation will actually use is required: --no-serve does
+# not need npm, and a machine where everything is already in place does not need make
+# or curl, because nothing will be installed or cleaned.
+
+step "Prerequisites"
+
+have() { command -v "$1" >/dev/null 2>&1; }
+
+NEED_VENV=0; [[ -d .venv ]] || NEED_VENV=1
+NEED_JDK=0;  [[ -x "${JAVA_HOME}/bin/java" ]] || NEED_JDK=1
+
+NEED_WEB=0
+if [[ ${NO_SERVE} -eq 0 ]]; then NEED_WEB=1; fi
+
+NEED_NPM_INSTALL=0
+if [[ ${NEED_WEB} -eq 1 && ! -d dashboards/web/node_modules ]]; then NEED_NPM_INSTALL=1; fi
+
+# make drives the install and clean targets; nothing else here shells out to it.
+NEED_MAKE=0
+if [[ ${NEED_VENV} -eq 1 || ${NEED_JDK} -eq 1 || ${FRESH} -eq 1 ]]; then NEED_MAKE=1; fi
+
+missing=()
+if ! have uv; then
+  missing+=("uv        — the Python package manager. https://docs.astral.sh/uv/getting-started/")
+fi
+if [[ ${NEED_WEB} -eq 1 ]] && ! have npm; then
+  missing+=("npm       — for the dashboard. https://nodejs.org  (or re-run with --no-serve)")
+fi
+if [[ ${NEED_MAKE} -eq 1 ]] && ! have make; then
+  missing+=("make      — drives the environment and JDK install (dnf/apt install make)")
+fi
+if [[ ${NEED_JDK} -eq 1 ]]; then
+  if ! have curl; then missing+=("curl      — downloads the JDK"); fi
+  if ! have tar;  then missing+=("tar       — unpacks the JDK"); fi
+fi
+
+# Reported together rather than one at a time: a bare machine is missing several, and
+# discovering them one re-run apart is a miserable way to start.
+if [[ ${#missing[@]} -gt 0 ]]; then
+  warn "Missing tools this run needs:"
+  printf '         %s\n' "${missing[@]}" >&2
+  die "Install the above, then re-run."
+fi
+
+ok "uv$( [[ ${NEED_MAKE} -eq 1 ]] && printf ', make' )$( [[ ${NEED_WEB} -eq 1 ]] && printf ', npm' )"
+
+# What this run will have to build, said up front — the first run takes minutes and
+# should say so before it starts, not after.
+if [[ ${NEED_VENV} -eq 1 || ${NEED_JDK} -eq 1 || ${NEED_NPM_INSTALL} -eq 1 ]]; then
+  printf '       first run: installing'
+  [[ ${NEED_VENV} -eq 1 ]] && printf ' the Python environment,'
+  [[ ${NEED_JDK} -eq 1 ]] && printf ' a project-local JDK 17,'
+  [[ ${NEED_NPM_INSTALL} -eq 1 ]] && printf ' dashboard dependencies,'
+  printf '\b \n       this takes a few minutes\n'
+fi
+
+# ---------------------------------------------------------------- 2. toolchain
 
 step "Toolchain"
 
-command -v uv >/dev/null 2>&1 || die "uv not found — https://docs.astral.sh/uv/getting-started/"
-
-if [[ ! -d .venv ]]; then
-  printf '       installing the Python environment and a project-local JDK 17...\n'
+if [[ ${NEED_VENV} -eq 1 ]]; then
   make setup >/dev/null 2>&1 || die "make setup failed — run it directly to see why"
   ok "python environment created"
 else
   skip "python environment present"
 fi
 
-if [[ ! -x "${JAVA_HOME}/bin/java" ]]; then
+if [[ ${NEED_JDK} -eq 1 ]]; then
   make jdk >/dev/null 2>&1 || die "could not install a JDK 17 — run \`make jdk\` to see why"
 fi
 ok "JDK 17 at ${JAVA_HOME}"
 
-if [[ ${NO_SERVE} -eq 0 ]]; then
-  command -v npm >/dev/null 2>&1 || die "npm not found — needed for the dashboard. Use --no-serve to skip it."
-  if [[ ! -d dashboards/web/node_modules ]]; then
-    printf '       installing dashboard dependencies...\n'
-    (cd dashboards/web && npm install --no-audit --no-fund >/dev/null 2>&1) \
-      || die "npm install failed — run it in dashboards/web to see why"
-    ok "dashboard dependencies installed"
-  else
-    skip "dashboard dependencies present"
-  fi
+if [[ ${NEED_NPM_INSTALL} -eq 1 ]]; then
+  (cd dashboards/web && npm install --no-audit --no-fund >/dev/null 2>&1) \
+    || die "npm install failed — run it in dashboards/web to see why"
+  ok "dashboard dependencies installed"
+elif [[ ${NEED_WEB} -eq 1 ]]; then
+  skip "dashboard dependencies present"
 fi
 
 # One Spark start-up costs ~10s, so this is not free — but a JDK/Delta mismatch
@@ -118,7 +174,7 @@ if [[ ${SERVE_ONLY} -eq 0 ]]; then
   ok "Spark + Delta verified"
 fi
 
-# ---------------------------------------------------------------- 2. backend
+# ---------------------------------------------------------------- 3. backend
 
 GOLD="data/gold/fact_txn_scored"
 
@@ -145,7 +201,7 @@ else
   uv run sentinel-run all || die "the pipeline failed"
 fi
 
-# ---------------------------------------------------------------- 3. export
+# ---------------------------------------------------------------- 4. export
 
 step "Export"
 uv run sentinel-web-export >/dev/null 2>&1 || die "export failed — is there a Gold layer?"
@@ -157,7 +213,7 @@ if [[ ${NO_SERVE} -eq 1 ]]; then
   exit 0
 fi
 
-# ---------------------------------------------------------------- 4. frontend
+# ---------------------------------------------------------------- 5. frontend
 
 step "Dashboard"
 

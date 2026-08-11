@@ -82,7 +82,7 @@ And the business layer, over the same run:
 - 88.2% success rate, ₹1,751 average ticket, ~10,100 daily active payers
 - KPIs cut by bank, app and city; `IDFC` leads volume at ₹3.99 Cr
 
-`114 tests passing · ruff clean · mypy clean · TypeScript clean`
+`116 tests passing · ruff clean · mypy clean · TypeScript clean`
 
 ---
 
@@ -271,7 +271,7 @@ make gen SCALE=0.05          # smaller dataset
 make run-landing             # or run-bronze / run-silver / run-gold
 make run-local               # all four
 make report                  # KPIs, alerts, quarantine, detection vs. truth
-make check                   # ruff + mypy + TypeScript + 114 tests
+make check                   # ruff + mypy + TypeScript + 116 tests
 ```
 
 ---
